@@ -2,15 +2,55 @@
 #include "st7735.h"
 #include "menu.h"
 #include "PID.h"
- 
+#include "mRotaryEncoder.h"
+#include "splash.h"
+
+ #define MAX 100
+#define MIN 0
+
 //ST7735_LCD lcd( PinName CS, PinName RESET, PinName RS, PinName SCL, PinName SDA, PinName BL = NC, backlight_t blType = Constant, float defaultBackLightLevel = 1.0 );
 ST7735_LCD lcd( PB_12, PA_4, PB_1, PA_5, PA_7);
 AnalogIn thr(PA_0);
 AnalogIn pot(PA_1);
-DigitalIn btn(PA_3);
+
+mRotaryEncoder adjust_enc(PB_14, PB_15, PA_3);//pinA,pinB,pinSW
+
+float resolution = 1.0;
+float adjust_set = 0.0;
+float adjust_last = 0.0;
+bool button = 1;
+
+
+float AdjustVal(float adjust_val){
+    adjust_val += (adjust_enc.Get() * resolution);    
+    if( adjust_val >= MAX){ 
+        adjust_val = MAX;
+        }else if(adjust_val <= MIN){ 
+            adjust_val = MIN;         
+        }
+        adjust_enc.Set(0);
+    return adjust_val;
+}
+void Set_Resolution(void){
+    button = !button;
+    if( resolution == 1.0 ){
+        resolution = 0.1;
+        }else{
+            resolution = 1.0;
+            }
+}           
+
+DigitalOut myled(LED1);
+
+
+
+
+
+//DigitalIn btn(PA_3);
 DigitalOut relay(PB_3);
 
 void doLineGraph(int xOffset = 5);
+void drawSplash();
 bool controlling = false;
 uint16_t controllingWhich = 0;
 
@@ -40,31 +80,46 @@ float readThr(float &thr_val,float &thr_res ){
 		return ((1/(0.001129148+(0.000234125*thr_res)+(0.0000000876741*thr_res*thr_res*thr_res)))-273.15);
 }
 
+
+
 int main() {
-    btn.mode(PullUp);
+
+    adjust_enc.attachSW( &Set_Resolution);
+
+
+
+    //btn.mode(PullUp);
     potPos = pot.read_u16()/(65535/100 );
 
     lcd.Initialize();
-    lcd.ClearScreen();
+
     relay = 1;
     timeSinceStart.start();
 
     
     // print something on the screen
-    lcd.SetFont( &TerminusFont );
-
+    //lcd.SetFont( &TerminusFont );
+    
+    drawSplash();
+    
     while(1) {
+        
+        myled = 1;
+        adjust_set = AdjustVal(adjust_set);
+        adjust_last = adjust_set;
 
+
+            
         //Print temp
         //char buf[10];
         //sprintf(buf, "%f", readThr(thr_val,thr_res));
         //lcd.Print( buf, CENTER, 25 ,-2,COLOR_BLACK); // align text to center horizontally and use starndard colors
 
-        if(btn){
-            lcd.Print(" ", CENTER, 50 ,-2,COLOR_BLACK);
-        }else{
-            lcd.Print("!", CENTER, 50 ,-2,COLOR_BLACK);
-        }
+        // if(btn){
+        //     lcd.Print(" ", CENTER, 50 ,-2,COLOR_BLACK);
+        // }else{
+        //     lcd.Print("!", CENTER, 50 ,-2,COLOR_BLACK);
+        // }
         potPos = pot.read_u16()/(65535/100 );
         doLineGraph();
         // lcd.Print(" ", potPos, 75 ,-2,COLOR_BLACK);
@@ -74,6 +129,25 @@ int main() {
         //wait(0.1);
         
     }
+}
+
+void drawSplash(){
+    lcd.FillRect( 0, 0, 127, 127, COLOR_WHITE );
+    for(int i = 0; i<128; i++){
+        for(int j = 0; j<128; j++){
+            
+            uint8_t byte = splashScreenImg[i][j/8];
+
+            if  (((byte >> 7-(j%8)) & 1)==0){
+                lcd.DrawPixel( j, i, COLOR_BLACK);
+            }
+            
+            
+        }
+    }
+
+    wait(5);
+    lcd.ClearScreen();
 }
 
 float getCurVal(){
@@ -126,6 +200,9 @@ void doLineGraph(int xOffset){
     sprintf(buf, "%.1f", getCurVal());
     lcd.Print( buf, LEFT + 90, 115 ,-2,COLOR_BLACK);
 
+
+    sprintf(buf, "%.1f", adjust_set);
+    lcd.Print( buf, LEFT + 40, 115 ,-2,COLOR_BLACK);
     // if(controlling){
 
     //     if(controllingWhich>=100&&controllingWhich<0){
